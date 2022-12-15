@@ -1,0 +1,147 @@
+﻿@page "/";
+@using Shows;
+@using Cast;
+@using Actors;
+@using System.Text.RegularExpressions;
+
+<nav class="navbar bg-light">
+    <div class="container-fluid">
+        <h5>Shows</h5>
+    </div>
+</nav>
+
+<div class="row">
+    <div class="col-3">
+        <input type="text" @bind="@inputShow" />
+        <button @onclick="SearchShow">Search</button>
+    </div>
+    <div class="col-9 ml-5">
+        @if (show != null && cast != null)
+        {
+            <div class="row">
+                <div class="col-3">
+                    <img src="@show.image.medium" />
+                </div>
+                <div class="col-9">
+                    <p><b>Name:</b> @show.name</p>
+                    <p><b>Rating:</b> @show.rating.average</p>
+                    <p><b>Type:</b> @show.type</p>
+                    <p><b>Premiered:</b> @show.premiered</p>
+                    <p><b>Network:</b> @show.network.name</p>
+                    <label for="cast">Cast Members:</label>
+                    <select @bind="selectedActor" id="cast">
+                        @foreach (var castMember in cast) {
+                            <option value="@castMember.person.id">@castMember.person.name - @castMember.character.name</option>
+                        }
+                    </select>
+                    <button @onclick="SearchActor">Search Actor</button>
+                </div>
+            </div>
+            <div class="mt-5 w-75">
+                @show.summary
+            </div>
+        }
+        else if (actor != null) {
+            <div class="row">
+                <div class="col-3">
+                    <img src="@actor.image.medium" />
+                </div>
+                <div class="col-9">
+                    <p><b>Name:</b> @actor.name</p>
+                    <p><b>Birth:</b> @actor.birthday</p>
+                    <p><b>Death:</b> @actor.deathday</p>
+                    <p><b>Country:</b> @actor.country.name</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <h2>Sorry, couldn't load that data</h2>
+        }
+    </div>
+</div>
+
+@code {
+    private Show show;
+    private string inputShow;
+    private int selectedActor;
+    private Actor actor;
+
+    private List<CastMember> cast;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadShowData("always sunny in philidelphia");
+    }
+
+    public async Task LoadShowData(string showName)
+    {
+        actor = null;
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.tvmaze.com/singlesearch/shows?q={showName}");
+
+        HttpClient client = new HttpClient();
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            show = await response.Content.ReadFromJsonAsync<Show>();
+            Regex rgx = new Regex("<p>|</p>|<b>|</b>");
+            show.summary = rgx.Replace(show.summary, "");
+
+            GetShowCast(show.id);
+        }
+        else {
+            show = null;
+        }
+    }
+
+    public void SearchShow() {
+        LoadShowData(this.inputShow);
+    }
+
+    public async Task GetShowCast(int id) {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.tvmaze.com/shows/{id}/cast");
+
+        HttpClient client = new HttpClient();
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            cast = await response.Content.ReadFromJsonAsync<List<CastMember>>();
+
+            Console.WriteLine(cast.Count);
+        }
+        else
+        {
+            show = null;
+        }
+
+        StateHasChanged();
+    }
+
+    public async Task LoadActorData(int id) {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.tvmaze.com/people/{id}");
+
+        HttpClient client = new HttpClient();
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            show = null;
+            cast = null;
+            actor = await response.Content.ReadFromJsonAsync<Actor>();
+        }
+        else
+        {
+            actor = null;
+        }
+
+        StateHasChanged();
+    }
+
+    public async void SearchActor() {
+        this.show = null;
+        await LoadActorData(this.selectedActor);
+    }
+}
